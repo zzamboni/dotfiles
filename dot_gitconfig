@@ -1,0 +1,70 @@
+[user]
+	name = Diego Zamboni
+	email = diego@zzamboni.org
+[color]
+	ui = auto
+[alias]
+	st = status
+	ci = commit
+	br = branch
+	co = checkout
+	pr-clean = "!git for-each-ref refs/heads/pr/* --format='%(refname)' | while read ref ; do branch=${ref#refs/heads/} ; git branch -D $branch ; done"
+	git = !exec git
+	aliases = !exec git config --list | grep alias
+	today = log --since midnight -p
+	todaycp = !exec git today | pbcopy
+[clean]
+	requireForce = false
+[push]
+	default = matching
+[help]
+	autocorrect = 1
+[hub]
+	protocol = https
+[pull]
+	rebase = true
+[filter "media"]
+	clean = git media clean %f
+	smudge = git media smudge %f
+	required = true
+[credential]
+	helper = /usr/local/bin/git-credential-manager
+	credentialStore = secretservice
+[credential "https://dev.azure.com"]
+	useHttpPath = true
+[core]
+	autocrlf = false
+    	pager = delta
+	attributesfile = /Users/taazadi1/.gitattributes
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	required = true
+	process = git-lfs filter-process
+[multi]
+	groupbyoutput = 1
+[color "diff-highlight"]
+	oldNormal = red bold
+	oldHighlight = red bold 52
+	newNormal = green bold
+	newHighlight = green bold 22
+[pager]
+	branch = false
+	tag = false
+[interactive]
+    diffFilter = delta --color-only
+[diff "pdf"]
+    binary = true
+[delta]
+    features = line-numbers decorations
+    whitespace-error-style = 22 reverse
+[delta "decorations"]
+    commit-decoration-style = bold yellow box ul
+    file-style = bold yellow ul
+    file-decoration-style = none
+[github]
+	user = zzamboni
+[gitlab]
+	user = zzamboni
+[init]
+	defaultBranch = main

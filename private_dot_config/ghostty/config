@@ -1,0 +1,81 @@
+# This is the configuration file for Ghostty.
+#
+# This template file has been automatically created at the following
+# path since Ghostty couldn't find any existing config files on your system:
+#
+#   /home/diego/.config/ghostty/config
+#
+# The template does not set any default options, since Ghostty ships
+# with sensible defaults for all options. Users should only need to set
+# options that they want to change from the default.
+#
+# Run `ghostty +show-config --default --docs` to view a list of
+# all available config options and their default values.
+#
+# Additionally, each config option is also explained in detail
+# on Ghostty's website, at https://ghostty.org/docs/config.
+
+# Config syntax crash course
+# ==========================
+# # The config file consists of simple key-value pairs,
+# # separated by equals signs.
+# font-family = Iosevka
+# window-padding-x = 2
+#
+# # Spacing around the equals sign does not matter.
+# # All of these are identical:
+# key=value
+# key= value
+# key =value
+# key = value
+#
+# # Any line beginning with a # is a comment. It's not possible to put
+# # a comment after a config option, since it would be interpreted as a
+# # part of the value. For example, this will have a value of "#123abc":
+# background = #123abc
+#
+# # Empty values are used to reset config keys to default.
+# key =
+#
+# # Some config options have unique syntaxes for their value,
+# # which is explained in the docs for that config option.
+# # Just for example:
+# resize-overlay-duration = 4s 200ms
+
+# Remove titlebar when maximized
+gtk-titlebar-hide-when-maximized=true
+
+#window-decoration=none
+# Use Elvish
+shell-integration=elvish
+#command=/home/linuxbrew/.linuxbrew/bin/elvish
+command=/home/diego/go/bin/elvish
+#command=~/bin/linux-x86_64/zellij
+
+copy-on-select=clipboard
+clipboard-read = allow
+clipboard-write = allow
+
+# theme = GruvboxDark
+
+# Ctrl-tab and Ctrl-X o (like Emacs) to cycle among splits
+keybind = ctrl+tab=goto_split:next
+keybind = ctrl+x>o=goto_split:next
+
+# Emacs-like keybindings for creating new splits
+keybind = ctrl+x>2=new_split:right
+keybind = ctrl+x>3=new_split:down
+
+# Quick terminal
+# Note: Global keybindings are only supported in macOS
+keybind = super+backquote=toggle_quick_terminal
+
+# Creating and navigating tabs
+keybind = super+shift+]=next_tab
+keybind = super+shift+[=previous_tab
+keybind = ctrl+t=new_tab
+
+# Disable "Copied to clipboard" because it produces multiple notifications
+app-notifications = no-clipboard-copy
+
+macos-option-as-alt = true

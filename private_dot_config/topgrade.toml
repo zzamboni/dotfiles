@@ -1,0 +1,14 @@
+[misc]
+disable = ["gem", "node", "cargo", "pip3", "raco", "mas", "pip3", "firmware" ]
+no_retry = true
+skip_notify = true
+
+[git]
+arguments = "--rebase --autostash"
+
+[commands]
+#"01 Rebuild org-mode" = "cd ~/.emacs.d/lisp/org-mode && make compile-dirty >/dev/null"
+#"02 Restart Emacs"  = "(pgrep -q Emacs && emacsclient -e '(progn (save-some-buffers t) (restart-emacs))') || echo 'Emacs not running, not restarting'"
+"Elvish packages" = "elvish -c 'use epm; epm:upgrade'"
+#"99 Update Ansible config files from running system" = "cd ~/Personal/devel/mac/mac-setup && ./update-vars-files.elv"
+"TeX/LaTeX packages" = "tlmgr update --all"
