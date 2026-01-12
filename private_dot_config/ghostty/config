@@ -48,8 +48,8 @@ gtk-titlebar-hide-when-maximized=true
 #window-decoration=none
 # Use Elvish
 shell-integration=elvish
-#command=/home/linuxbrew/.linuxbrew/bin/elvish
-command=/home/diego/go/bin/elvish
+command=/home/linuxbrew/.linuxbrew/bin/elvish
+#command=/home/diego/go/bin/elvish
 #command=~/bin/linux-x86_64/zellij
 
 copy-on-select=clipboard
