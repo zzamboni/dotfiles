@@ -16,6 +16,7 @@ disabled = true
 # Use as prompt symbol a combination which creates a nice ligature in Fira Code
 [character]
 success_symbol = "[|>](green)"
+error_symbol = "[|>](bold red)"
 
 # Show previous command duration if longer than 10 seconds
 [cmd_duration]
