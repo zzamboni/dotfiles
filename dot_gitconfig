@@ -28,8 +28,8 @@
 	smudge = git media smudge %f
 	required = true
 [credential]
-	helper = /usr/local/bin/git-credential-manager
 	credentialStore = secretservice
+	helper = /usr/local/bin/git-credential-manager
 [credential "https://dev.azure.com"]
 	useHttpPath = true
 [core]

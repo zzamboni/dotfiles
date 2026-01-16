@@ -233,6 +233,7 @@ fonts_cache    := env_var("HOME") + "/.cache/fonts/archives"
 fonts_dir      := env_var("HOME") + "/.local/share/fonts"
 fonts_staging  := env_var("HOME") + "/.cache/fonts/staging"
 
+# Install fonts listed in ~/.config/fonts/manifest.tsv
 fonts-install:
     #!/usr/bin/env bash
     ### Install fonts listed in the manifest (download, verify, extract)
@@ -287,12 +288,12 @@ fonts-install:
     echo "### Rebuilding font cache"
     fc-cache -f "{{fonts_dir}}"
 
+# List installed user fonts
 fonts-list:
-    ### List installed user fonts
     fc-list | grep -F "{{fonts_dir}}" || true
 
+# Remove downloaded archives and staging
 fonts-clean-cache:
-    ### Remove downloaded archives and staging
     rm -rf "{{fonts_cache}}" "{{fonts_staging}}"
     
 # --- Config and dotfiles ---------------------------------------------------
