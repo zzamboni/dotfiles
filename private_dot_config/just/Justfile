@@ -1,0 +1,331 @@
+# Justfile — Bluefin baseline for MacBookPro11,5 (Haswell/Iris Pro)
+# Usage:
+#   just --list
+#   just baseline
+#   just vscode-disable-hwaccel
+#
+# Notes:
+# - Many tasks affect the next boot (rpm-ostree kargs).
+# - kargs changes create a new deployment. Pin known-good deployments.
+
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+
+HOME := env_var("HOME")
+USER := env_var("USER")
+
+# --- Helpers ---------------------------------------------------------------
+
+@_default:
+  just --list
+
+@_need cmd:
+  command -v "{{cmd}}" >/dev/null 2>&1 || { echo "Missing required command: {{cmd}}"; exit 1; }
+
+@_is_bluefin:
+  grep -q '^ID=bluefin' /etc/os-release || { echo "This doesn't look like Bluefin (ID!=bluefin). Aborting."; exit 1; }
+
+@_json_set_bool file key value:
+  just _need jq
+  { \
+    mkdir -p "$(dirname "{{file}}")"; \
+    tmp="$(mktemp)"; \
+    if [ -f "{{file}}" ] && jq -e . "{{file}}" >/dev/null 2>&1; then \
+      jq --arg k "{{key}}" --argjson v {{value}} '. + {($k): $v}' "{{file}}" > "$tmp"; \
+    else \
+      echo '{}' | jq --arg k "{{key}}" --argjson v {{value}} '. + {($k): $v}' > "$tmp"; \
+    fi; \
+    mv "$tmp" "{{file}}"; \
+  }
+
+
+# --- Info / sanity ---------------------------------------------------------
+
+# Show current configuration
+@status:
+  just _is_bluefin
+  @### OS ###
+  cat /etc/os-release | sed -n '1,12p'
+  echo
+  @### Session ###
+  echo "XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-unknown}"
+  echo
+  @### Full kernel cmdline ###
+  cat /proc/cmdline
+  echo
+  @### Kernel cmdline (i915) ###
+  cat /proc/cmdline | tr ' ' '\n' | grep -E '^i915\.' || true
+  echo
+  @### rpm-ostree status ###
+  rpm-ostree status
+
+# --- Kernel args (i915 stability) -----------------------------------------
+
+# Append the i915 safety flags you’ve been using.
+i915-append:
+  @just _is_bluefin
+  sudo rpm-ostree kargs \
+    --append=i915.enable_psr=0 \
+    --append=i915.enable_fbc=0 \
+    --append=i915.enable_dc=0 \
+    --append=i915.fastboot=0
+  @echo "Added i915 kernel args (takes effect after reboot)."
+
+# Remove those i915 flags again (for testing).
+i915-remove:
+  @just _is_bluefin
+  sudo rpm-ostree kargs \
+    --delete=i915.enable_psr \
+    --delete=i915.enable_fbc \
+    --delete=i915.enable_dc \
+    --delete=i915.fastboot
+  @echo "Removed i915 kernel args (takes effect after reboot)."
+
+# Optional “max compatibility” additions (only if you hit new-kernel freezes/regressions).
+i915-append-max-compat:
+  @just _is_bluefin
+  sudo rpm-ostree kargs \
+    --append=i915.enable_guc=0 \
+    --append=i915.enable_huc=0 \
+    --append=i915.mitigations=off
+  @echo "Added max-compat i915 args (takes effect after reboot)."
+
+# --- Deployment hygiene ----------------------------------------------------
+
+# Pin the currently booted deployment so it won't be GC’d.
+pin-current:
+  @just _need ostree
+  @sudo ostree admin pin 0
+  @echo "Pinned current deployment (index 0)."
+
+# Show deployments with indices (useful before pin/undeploy decisions).
+deployments:
+  @just _need ostree
+  @sudo ostree admin status
+
+# --- Electron / VS Code stability -----------------------------------------
+
+# VS Code: disable hardware acceleration (JSON-aware merge) for your installation path.
+vscode-disable-hwaccel:
+  @just _json_set_bool "{{HOME}}/.vscode/argv.json" "disable-hardware-acceleration" true
+  @echo "Wrote/merged {{HOME}}/.vscode/argv.json: disable-hardware-acceleration=true"
+
+# VS Code: re-enable hardware acceleration (JSON-aware merge).
+vscode-enable-hwaccel:
+  @just _json_set_bool "{{HOME}}/.vscode/argv.json" "disable-hardware-acceleration" false
+  @echo "Wrote/merged {{HOME}}/.vscode/argv.json: disable-hardware-acceleration=false"
+
+# A generic Electron flags file (some Electron apps honor this; VS Code often does not).
+electron-global-disable-gpu:
+  @mkdir -p "{{HOME}}/.config"
+  @( echo "--disable-gpu"; echo "--disable-gpu-compositing" ) > "{{HOME}}/.config/electron-flags.conf"
+  ### Wrote {{HOME}}/.config/electron-flags.conf (some Electron apps may honor this)." ###
+
+# --- Package installation -------------------------------------------------
+
+### 1Password
+### Instructions from https://monospacementor.com/wiki/Notes/Install+1Password+on+Fedora+Silverblue with some improvements.
+
+# Install 1Password using the official RPM repo (Fedora Silverblue / Bluefin)
+@onepassword-install:
+    just _need curl
+    @### ==> Installing 1Password GPG key"
+    sudo install -d -m 0755 /etc/pki/rpm-gpg
+    curl -fsSL https://downloads.1password.com/linux/keys/1password.asc | sudo tee /etc/pki/rpm-gpg/RPM-GPG-KEY-1password >/dev/null
+
+    @### ==> Installing official 1Password repo"
+    (echo "[1password]"; \
+    echo "name=1Password Stable Channel"; \
+    echo "baseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch"; \
+    echo "enabled=1"; \
+    echo "gpgcheck=1"; \
+    echo "repo_gpgcheck=1"; \
+    echo "gpgkey=https://downloads.1password.com/linux/keys/1password.asc") | sudo tee /etc/yum.repos.d/1password.repo
+
+    @### ==> Layering 1Password packages (activation requires reboot)"
+    sudo rpm-ostree install 1password 1password-cli
+
+    echo
+    @### 1Password installed into next deployment."
+    @### Reboot to activate: systemctl reboot"
+
+# Disable GPU acceleration for 1Password (Electron stability on Haswell)
+onepassword-disable-hwaccel:
+  @just _json_set_bool "{{HOME}}/.config/1Password/settings/settings.json" "app.useHardwareAcceleration" false
+  ### 1Password GPU acceleration disabled (settings.json updated)
+
+# Verify 1Password installation
+onepassword-status:
+    # == Repo file ==
+    @test -f /etc/yum.repos.d/1password.repo && echo "✓ repo present" || echo "✗ repo missing"
+    @echo
+    # == Packages in deployment ==
+    @rpm -q 1password 1password-cli 2>/dev/null || echo "Not yet active (reboot pending?)"
+    @echo 
+    # == Hardware acceleration ==
+    @test -f "{{HOME}}/.config/1Password/settings/settings.json" && jq -e '.["app.useHardwareAcceleration"] == false' "{{HOME}}/.config/1Password/settings/settings.json" >/dev/null 2>&1 && echo "✓ hardware acceleration disabled" || echo "✗ hardware acceleration enabled or unset"
+
+### Ghostty
+### Instructions from https://ghostty.org/docs/install/binary#atomic-desktops-(silverblue)
+
+# Install the Ghostty terminal emulator
+@ghostty-install:
+  @### ==> Installing official Ghostty repo"
+  . /etc/os-release && curl -fsSL "https://copr.fedorainfracloud.org/coprs/scottames/ghostty/repo/fedora-${VERSION_ID}/scottames-ghostty-fedora-${VERSION_ID}.repo" | sudo tee /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:scottames:ghostty.repo > /dev/null
+  @### ==> Layering Ghostty package (activation requires reboot)"
+  rpm-ostree refresh-md && rpm-ostree install ghostty
+  echo
+  @### Ghostty installed into next deployment."
+  @### Reboot to activate: systemctl reboot"
+
+# Install GUI Emacs and helpers (idempotent)
+emacs-install:
+  ### Installing Emacs (GUI) using rpm-ostree if missing
+  @if ! rpm -q emacs ripgrep fd-find aspell >/dev/null 2>&1; then \
+    sudo rpm-ostree install emacs ripgrep fd-find aspell; \
+    echo "Packages installed; reboot required to activate."; \
+  else \
+    echo "Emacs and helpers already installed; nothing to do."; \
+  fi
+
+# Install or update Doom Emacs safely
+doom-emacs-install:
+  ### Ensure git is available
+  @just _need git
+
+  ### If ~/.emacs.d exists but is not Doom, back it up
+  @{ \
+    if [ -d "{{HOME}}/.emacs.d" ] && \
+       [ ! -f "{{HOME}}/.emacs.d/bin/doom" ] && \
+       [ ! -f "{{HOME}}/.emacs.d/core/core.el" ]; then \
+      backup="{{HOME}}/.emacs.d.backup.$$(date +%Y%m%d-%H%M%S)"; \
+      echo "Backing up existing ~/.emacs.d to $$backup"; \
+      mv "{{HOME}}/.emacs.d" "$$backup"; \
+    fi; \
+  }
+
+  ### Install Doom Emacs if missing
+  @{ \
+    if [ ! -d "{{HOME}}/.emacs.d" ]; then \
+      git clone --depth 1 https://github.com/doomemacs/doomemacs "{{HOME}}/.emacs.d"; \
+    fi; \
+  }
+
+  ### Run Doom install or update
+  @{ \
+    if [ -x "{{HOME}}/.emacs.d/bin/doom" ]; then \
+      if [ ! -d "{{HOME}}/.doom.d" ]; then \
+        just clone-emacs-config; \
+        "{{HOME}}/.emacs.d/bin/doom" install; \
+      else \
+        "{{HOME}}/.emacs.d/bin/doom" upgrade; \
+      fi; \
+    else \
+      echo "ERROR: Doom binary not found after install"; \
+      exit 1; \
+    fi; \
+  }
+
+# --- Fonts management -------------------------------------------------------
+
+# manifest in format name<TAB>url<TAB>sha256
+fonts_manifest := env_var_or_default("FONTS_MANIFEST", env_var("HOME") + "/.config/fonts/manifest.tsv")
+fonts_cache    := env_var("HOME") + "/.cache/fonts/archives"
+fonts_dir      := env_var("HOME") + "/.local/share/fonts"
+fonts_staging  := env_var("HOME") + "/.cache/fonts/staging"
+
+fonts-install:
+    #!/usr/bin/env bash
+    ### Install fonts listed in the manifest (download, verify, extract)
+    set -euox pipefail
+    mkdir -p "{{fonts_cache}}" "{{fonts_dir}}" "{{fonts_staging}}"
+
+    # Read: name \t url \t sha256
+    while IFS=$'\t' read -r name url sha; do
+      [ -z "${name:-}" ] && continue
+      case "$name" in \#* ) continue ;; esac
+
+      archive="{{fonts_cache}}/$name"
+
+      ### Download if missing
+      if [ ! -f "$archive" ]; then
+        echo "### Downloading $name"
+        curl -L --fail -o "$archive" "$url"
+      else
+        echo "### Using cached $name"
+      fi
+
+      ### Verify checksum (if provided)
+      if [ -n "${sha:-}" ] && [ "$sha" != "-" ]; then
+        echo "### Verifying $name"
+        echo "$sha  $archive" | sha256sum -c -
+      else
+        echo "### Skipping checksum for $name"
+      fi
+
+      ### Extract into a clean staging dir
+      tmpdir="{{fonts_staging}}/${name}.d"
+      rm -rf "$tmpdir"
+      mkdir -p "$tmpdir"
+      echo "### Extracting $name"
+      unzip -q "$archive" -d "$tmpdir"
+
+      ### Install font files
+      base="$name"
+      base="${base%.tar.gz}"; base="${base%.zip}"; base="${base%.tar}"
+      destdir="{{fonts_dir}}/$base"
+      echo "### Installing fonts from $name into $destdir"
+      mkdir -p "$destdir"
+      find "$tmpdir" -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print0 \
+        | while IFS= read -r -d '' f; do
+            # Keep original filename
+            install -m 0644 "$f" "$destdir"
+          done
+
+    done < "{{fonts_manifest}}"
+
+    ### Rebuild font cache
+    echo "### Rebuilding font cache"
+    fc-cache -f "{{fonts_dir}}"
+
+fonts-list:
+    ### List installed user fonts
+    fc-list | grep -F "{{fonts_dir}}" || true
+
+fonts-clean-cache:
+    ### Remove downloaded archives and staging
+    rm -rf "{{fonts_cache}}" "{{fonts_staging}}"
+    
+# --- Config and dotfiles ---------------------------------------------------
+
+# Clone Elvish configuration
+@clone-elvish-config:
+  @### Cloning Elvish config
+  git clone https://github.com/zzamboni/dot-elvish.git ~/.config/elvish
+
+# Commit Elvish configuration
+@commit-elvish-config:
+  @### Committing Elvish config
+  cd ~/.config/elvish; git commit -a -m 'Latest changes' || true; git push || true
+
+# Clone Doom Emacs configuration
+@clone-emacs-config:
+  @### Cloning Emacs config
+  git clone https://github.com/zzamboni/dot-doom.git ~/.doom.d
+
+# --- Baseline meta-task ----------------------------------------------------
+
+# Run the baseline you likely want on MBP11,5:
+# - pin current deployment
+# - add i915 stability args (requires reboot)
+# - disable VS Code HW accel (immediate)
+[doc('Set minimum baseline for MBP11,5')]
+@baseline:
+  just pin-current
+  just i915-append
+  just vscode-disable-hwaccel
+  just onepassword-install
+  just onepassword-disable-hwaccel
+  just ghostty-install
+  echo
+  @### Baseline applied. Next step: reboot to activate kernel args:
+  @###    systemctl reboot
