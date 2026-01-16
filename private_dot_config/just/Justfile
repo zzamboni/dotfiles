@@ -227,6 +227,10 @@ doom-emacs-install:
 
 # --- Fonts management -------------------------------------------------------
 
+### Fonts policy:
+### - Large / upstream fonts (e.g. Nerd Fonts) → manifest.tsv + fonts-install
+### - Small, stable, personal fonts (e.g. Alegreya Variable) → chezmoi
+
 # manifest in format name<TAB>url<TAB>sha256
 fonts_manifest := env_var_or_default("FONTS_MANIFEST", env_var("HOME") + "/.config/fonts/manifest.tsv")
 fonts_cache    := env_var("HOME") + "/.cache/fonts/archives"
