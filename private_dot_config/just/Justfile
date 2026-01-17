@@ -225,6 +225,74 @@ doom-emacs-install:
     fi; \
   }
 
+# --- Git Credential Manager
+
+gcm_version := "2.6.1"
+gcm_arch    := "linux_amd64"
+gcm_bindir  := "/usr/local/bin"
+
+# Install Git Credential Manager (GCM) from official tarball
+git-cred-install:
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  gcm_url="https://github.com/git-ecosystem/git-credential-manager/releases/download/v{{gcm_version}}/gcm-{{gcm_arch}}.{{gcm_version}}.tar.gz"
+  gcm_bin="{{gcm_bindir}}/git-credential-manager"
+
+  if [ -x "$gcm_bin" ]; then
+    echo "### git-credential-manager already installed"
+    "$gcm_bin" --version || true
+    exit 0
+  fi
+
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "$tmpdir"' EXIT
+
+  archive="$tmpdir/gcm.tar.gz"
+
+  echo "### Downloading GCM {{gcm_version}}"
+  curl -L --fail -o "$archive" "$gcm_url"
+
+  echo "### Extracting"
+  tar -xzf "$archive" -C "$tmpdir"
+
+  if [ ! -f "$tmpdir/git-credential-manager" ]; then
+    echo "### ERROR: git-credential-manager binary not found in archive"
+    exit 1
+  fi
+
+  echo "### Installing to {{gcm_bindir}}"
+  sudo install -m 0755 "$tmpdir/git-credential-manager" "$gcm_bin"
+
+  echo "### Installed:"
+  "$gcm_bin" --version
+
+# Configure Git to use GCM with Secret Service
+@git-cred-configure:
+    just _need git-credential-manager "run: just git-cred-install"
+
+    @### Configuring GCM
+    git-credential-manager configure
+
+    @### Setting credential store to Secret Service
+    git config --global credential.credentialStore secretservice
+
+    @### Setting recommended defaults
+    git config --global credential.useHttpPath true
+
+    just git-cred-status
+
+# Show Git credential helper configuration
+@git-cred-status:
+    @### git-credential-manager
+    command -v git-credential-manager
+    git-credential-manager --version
+
+    @### git credential config (global)
+    git config --global --show-origin --show-names --get-all credential.helper || true
+    git config --global --show-origin --show-names --get credential.credentialStore || true
+    git config --global --show-origin --show-names --get credential.useHttpPath || true
+
 # --- Fonts management -------------------------------------------------------
 
 ### Fonts policy:
