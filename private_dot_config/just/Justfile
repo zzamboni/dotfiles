@@ -18,8 +18,8 @@ USER := env_var("USER")
 @_default:
   just --list
 
-@_need cmd:
-  command -v "{{cmd}}" >/dev/null 2>&1 || { echo "Missing required command: {{cmd}}"; exit 1; }
+@_need cmd extramsg="":
+  command -v "{{cmd}}" >/dev/null 2>&1 || { echo "### Missing required command: {{cmd}}"; if [ -n "### {{extramsg}}" ]; then echo "{{extramsg}}"; fi; exit 1; }
 
 @_is_bluefin:
   grep -q '^ID=bluefin' /etc/os-release || { echo "This doesn't look like Bluefin (ID!=bluefin). Aborting."; exit 1; }
@@ -63,12 +63,12 @@ USER := env_var("USER")
 # Append the i915 safety flags you’ve been using.
 i915-append:
   @just _is_bluefin
-  sudo rpm-ostree kargs \
-    --append=i915.enable_psr=0 \
-    --append=i915.enable_fbc=0 \
-    --append=i915.enable_dc=0 \
-    --append=i915.fastboot=0
-  @echo "Added i915 kernel args (takes effect after reboot)."
+  @sudo rpm-ostree kargs \
+    --append-if-missing=i915.enable_psr=0 \
+    --append-if-missing=i915.enable_fbc=0 \
+    --append-if-missing=i915.enable_dc=0 \
+    --append-if-missing=i915.fastboot=0
+  ### Added i915 kernel args (if there were changes, they will take effect after reboot)."
 
 # Remove those i915 flags again (for testing).
 i915-remove:
@@ -84,10 +84,10 @@ i915-remove:
 i915-append-max-compat:
   @just _is_bluefin
   sudo rpm-ostree kargs \
-    --append=i915.enable_guc=0 \
-    --append=i915.enable_huc=0 \
-    --append=i915.mitigations=off
-  @echo "Added max-compat i915 args (takes effect after reboot)."
+    --append-if-missing=i915.enable_guc=0 \
+    --append-if-missing=i915.enable_huc=0 \
+    --append-if-missing=i915.mitigations=off
+  @echo "Added max-compat i915 args (if there were changes, they will take effect after reboot)."
 
 # --- Deployment hygiene ----------------------------------------------------
 
@@ -309,7 +309,7 @@ fonts_staging  := env_var("HOME") + "/.cache/fonts/staging"
 fonts-install:
     #!/usr/bin/env bash
     ### Install fonts listed in the manifest (download, verify, extract)
-    set -euox pipefail
+    set -euo pipefail
     mkdir -p "{{fonts_cache}}" "{{fonts_dir}}" "{{fonts_staging}}"
 
     # Read: name \t url \t sha256
