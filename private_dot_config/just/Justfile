@@ -385,20 +385,33 @@ fonts-clean-cache:
   @### Cloning Emacs config
   git clone https://github.com/zzamboni/dot-doom.git ~/.doom.d
 
+# Create useful symlinks
+@symlink-dropbox-dirs:
+    @### Setting up symlinks
+    ln -sf ~/Dropbox/Personal ~
+    ln -sf ~/Dropbox/Reference ~
+    ln -sf ~/Dropbox/bin ~
+
 # --- Baseline meta-task ----------------------------------------------------
 
-# Run the baseline you likely want on MBP11,5:
-# - pin current deployment
-# - add i915 stability args (requires reboot)
-# - disable VS Code HW accel (immediate)
+# Run the baseline you likely want on MBP11,5
 [doc('Set minimum baseline for MBP11,5')]
 @baseline:
-  just pin-current
-  just i915-append
-  just vscode-disable-hwaccel
-  just onepassword-install
-  just onepassword-disable-hwaccel
-  just ghostty-install
-  echo
-  @### Baseline applied. Next step: reboot to activate kernel args:
-  @###    systemctl reboot
+    @### Kernel config
+    just i915-append
+    @### Installing and configuring apps
+    just vscode-disable-hwaccel
+    just onepassword-install
+    just onepassword-disable-hwaccel
+    just ghostty-install
+    just fonts-install
+    just emacs-install
+    @### Cloning configs
+    just clone-elvish-config
+    just clone-emacs-config
+    just doom-emacs-install
+    just git-cred-install
+    just git-cred-configure
+    echo
+    @### Baseline applied. Next step: reboot to activate kernel args:
+    @###    systemctl reboot
