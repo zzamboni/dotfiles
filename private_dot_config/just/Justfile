@@ -37,6 +37,50 @@ USER := env_var("USER")
     mv "$tmp" "{{file}}"; \
   }
 
+# Clone a git repo if missing; skip if correct repo already present.
+# Usage: just _clone_repo <dest> <url>
+_clone_repo dest url:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    dest="{{dest}}"
+    url="{{url}}"
+
+    # Accept both .git and non-.git origin URLs as equivalent
+    url_nogit="${url%.git}"
+
+    if [ -d "$dest/.git" ]; then
+        origin="$(git -C "$dest" remote get-url origin 2>/dev/null || true)"
+
+        if [[ "$origin" == "$url" || "$origin" == "$url_nogit" ]]; then
+            echo "### $dest already contains correct repo; skipping."
+            exit 0
+        fi
+
+        echo "### ERROR: $dest is a git repo but origin is:"
+        echo "###   $origin"
+        echo "### Expected:"
+        echo "###   $url"
+        exit 1
+    fi
+
+    if [ -e "$dest" ]; then
+        echo "### ERROR: $dest exists but is not a git repository."
+        echo "### Refusing to overwrite."
+        exit 1
+    fi
+
+    echo "### Cloning $url -> $dest"
+    git clone "$url" "$dest"
+
+@_ensure_rpms pkgs:
+  @if ! rpm -q {{pkgs}} >/dev/null 2>&1; then \
+    sudo rpm-ostree install {{pkgs}}; \
+  fi
+
+[no-exit-message]
+@_package_installed pkg:
+    rpm-ostree status --json | jq -e '.deployments[0].packages | index("{{pkg}}")' >/dev/null
 
 # --- Info / sanity ---------------------------------------------------------
 
@@ -58,7 +102,7 @@ USER := env_var("USER")
   @### rpm-ostree status ###
   rpm-ostree status
 
-# --- Kernel args (i915 stability) -----------------------------------------
+# --- Hardware-specific config -----------------------------------------
 
 # Append the i915 safety flags you’ve been using.
 i915-append:
@@ -88,6 +132,48 @@ i915-append-max-compat:
     --append-if-missing=i915.enable_huc=0 \
     --append-if-missing=i915.mitigations=off
   @echo "Added max-compat i915 args (if there were changes, they will take effect after reboot)."
+
+# Disable idle-triggered suspend (MBP11,5 only)
+disable-idle-suspend:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Guard: only apply to MacBookPro11,5
+    if [[ "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null)" != "Apple Inc." ]] || \
+       [[ "$(cat /sys/class/dmi/id/product_name 2>/dev/null)" != "MacBookPro11,5" ]]; then
+      echo "### Not MacBookPro11,5; skipping idle-suspend workaround."
+      exit 0
+    fi
+
+    conf_dir="/etc/systemd/logind.conf.d"
+    conf_file="${conf_dir}/99-disable-idle-suspend.conf"
+    desired_content=$'[Login]\nIdleAction=ignore\n'
+
+    echo "### Disabling idle suspend on MacBookPro11,5"
+
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    printf '%s' "$desired_content" >"$tmp"
+
+    sudo install -d -m 0755 "$conf_dir"
+
+    if sudo test -f "$conf_file" && sudo cmp -s "$tmp" "$conf_file"; then
+      echo "### Already configured; nothing to do."
+      exit 0
+    fi
+
+    sudo install -m 0644 "$tmp" "$conf_file"
+
+    echo "### Restarting systemd-logind"
+    sudo systemctl restart systemd-logind
+
+    echo "### Verified config:"
+    systemd-analyze cat-config systemd/logind.conf \
+      | sed -n '/99-disable-idle-suspend\.conf/,+5p' || true
+
+# Status of idle suspend configuration
+@idle-suspend-status:
+    systemd-analyze cat-config systemd/logind.conf | grep -nE 'IdleAction|99-disable-idle-suspend\.conf' || true
 
 # --- Deployment hygiene ----------------------------------------------------
 
@@ -126,13 +212,20 @@ electron-global-disable-gpu:
 ### Instructions from https://monospacementor.com/wiki/Notes/Install+1Password+on+Fedora+Silverblue with some improvements.
 
 # Install 1Password using the official RPM repo (Fedora Silverblue / Bluefin)
-@onepassword-install:
-    just _need curl
-    @### ==> Installing 1Password GPG key"
+onepassword-install:
+    #!/usr/bin/env bash
+
+    if just _package_installed 1password; then
+      echo "### 1Password already layered; nothing to do."
+      exit 0
+    fi
+    
+    just _need curl || exit 1
+    echo "### ==> Installing 1Password GPG key"
     sudo install -d -m 0755 /etc/pki/rpm-gpg
     curl -fsSL https://downloads.1password.com/linux/keys/1password.asc | sudo tee /etc/pki/rpm-gpg/RPM-GPG-KEY-1password >/dev/null
 
-    @### ==> Installing official 1Password repo"
+    echo "### ==> Installing official 1Password repo"
     (echo "[1password]"; \
     echo "name=1Password Stable Channel"; \
     echo "baseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch"; \
@@ -141,12 +234,12 @@ electron-global-disable-gpu:
     echo "repo_gpgcheck=1"; \
     echo "gpgkey=https://downloads.1password.com/linux/keys/1password.asc") | sudo tee /etc/yum.repos.d/1password.repo
 
-    @### ==> Layering 1Password packages (activation requires reboot)"
-    sudo rpm-ostree install 1password 1password-cli
+    echo "### ==> Layering 1Password packages (activation requires reboot)"
+    just _ensure_rpms "1password 1password-cli"
 
     echo
-    @### 1Password installed into next deployment."
-    @### Reboot to activate: systemctl reboot"
+    echo "### 1Password installed into next deployment."
+    echo "### Reboot to activate: systemctl reboot"
 
 # Disable GPU acceleration for 1Password (Electron stability on Haswell)
 onepassword-disable-hwaccel:
@@ -168,31 +261,40 @@ onepassword-status:
 ### Instructions from https://ghostty.org/docs/install/binary#atomic-desktops-(silverblue)
 
 # Install the Ghostty terminal emulator
-@ghostty-install:
-  @### ==> Installing official Ghostty repo"
-  . /etc/os-release && curl -fsSL "https://copr.fedorainfracloud.org/coprs/scottames/ghostty/repo/fedora-${VERSION_ID}/scottames-ghostty-fedora-${VERSION_ID}.repo" | sudo tee /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:scottames:ghostty.repo > /dev/null
-  @### ==> Layering Ghostty package (activation requires reboot)"
-  rpm-ostree refresh-md && rpm-ostree install ghostty
-  echo
-  @### Ghostty installed into next deployment."
-  @### Reboot to activate: systemctl reboot"
+ghostty-install:
+    #!/usr/bin/env bash
+
+    if just _package_installed ghostty; then
+      echo "### Ghostty already layered; nothing to do."
+      exit 0
+    fi
+    
+    echo "### ==> Installing official Ghostty repo"
+    . /etc/os-release && curl -fsSL "https://copr.fedorainfracloud.org/coprs/scottames/ghostty/repo/fedora-${VERSION_ID}/scottames-ghostty-fedora-${VERSION_ID}.repo" | sudo tee /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:scottames:ghostty.repo > /dev/null
+    echo "@### ==> Layering Ghostty package (activation requires reboot)"
+    just _ensure_rpms ghostty
+    echo
+    echo "### Ghostty installed into next deployment."
+    echo "### Reboot to activate: systemctl reboot"
 
 # Install GUI Emacs and helpers (idempotent)
 emacs-install:
-  ### Installing Emacs (GUI) using rpm-ostree if missing
-  @if ! rpm -q emacs ripgrep fd-find aspell >/dev/null 2>&1; then \
-    sudo rpm-ostree install emacs ripgrep fd-find aspell; \
-    echo "Packages installed; reboot required to activate."; \
-  else \
-    echo "Emacs and helpers already installed; nothing to do."; \
-  fi
+    #!/usr/bin/env bash
+    if just _package_installed emacs; then
+      echo "### Emacs already layered; nothing to do."
+      exit 0
+    fi
+
+    echo "### Installing Emacs (GUI) and support packages"
+    just _ensure_rpms "emacs ripgrep fd-find aspell"; 
+    echo "### Packages installed; reboot required to activate."; 
 
 # Install or update Doom Emacs safely
 doom-emacs-install:
-  ### Ensure git is available
+  ### Installing Doom Emacs
   @just _need git
 
-  ### If ~/.emacs.d exists but is not Doom, back it up
+  #   If ~/.emacs.d exists but is not Doom, back it up
   @{ \
     if [ -d "{{HOME}}/.emacs.d" ] && \
        [ ! -f "{{HOME}}/.emacs.d/bin/doom" ] && \
@@ -203,14 +305,14 @@ doom-emacs-install:
     fi; \
   }
 
-  ### Install Doom Emacs if missing
+  #   Install Doom Emacs if missing
   @{ \
     if [ ! -d "{{HOME}}/.emacs.d" ]; then \
       git clone --depth 1 https://github.com/doomemacs/doomemacs "{{HOME}}/.emacs.d"; \
     fi; \
   }
 
-  ### Run Doom install or update
+  #   Run Doom install or update
   @{ \
     if [ -x "{{HOME}}/.emacs.d/bin/doom" ]; then \
       if [ ! -d "{{HOME}}/.doom.d" ]; then \
@@ -312,6 +414,8 @@ fonts-install:
     set -euo pipefail
     mkdir -p "{{fonts_cache}}" "{{fonts_dir}}" "{{fonts_staging}}"
 
+    changed=0
+
     # Read: name \t url \t sha256
     while IFS=$'\t' read -r name url sha; do
       [ -z "${name:-}" ] && continue
@@ -342,23 +446,49 @@ fonts-install:
       echo "### Extracting $name"
       unzip -q "$archive" -d "$tmpdir"
 
-      ### Install font files
+      ### Compute a bundle fingerprint from extracted font files
+      # (Stable ordering, includes file names + content via sha256sum output)
+      bundle_fp="$(
+        find "$tmpdir" -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print0 \
+          | LC_ALL=C sort -z \
+          | xargs -0 sha256sum \
+          | sha256sum \
+          | awk '{print $1}'
+      )"
+
+      ### Determine destination dir from archive name
       base="$name"
       base="${base%.tar.gz}"; base="${base%.zip}"; base="${base%.tar}"
       destdir="{{fonts_dir}}/$base"
+      stamp="$destdir/.installed.fp"
+
+      ### Skip if already installed and fingerprint matches
+      if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$bundle_fp" ]; then
+        echo "### $base already installed (fingerprint match); skipping."
+        continue
+      fi
+
       echo "### Installing fonts from $name into $destdir"
       mkdir -p "$destdir"
+
+      # Install/overwrite font files (idempotent)
       find "$tmpdir" -type f \( -iname '*.ttf' -o -iname '*.otf' -o -iname '*.ttc' \) -print0 \
         | while IFS= read -r -d '' f; do
-            # Keep original filename
-            install -m 0644 "$f" "$destdir"
+            install -m 0644 "$f" "$destdir/"
           done
+
+      echo "$bundle_fp" > "$stamp"
+      changed=1
 
     done < "{{fonts_manifest}}"
 
-    ### Rebuild font cache
-    echo "### Rebuilding font cache"
-    fc-cache -f "{{fonts_dir}}"
+    ### Rebuild font cache only if something changed
+    if [ "$changed" -eq 1 ]; then
+      echo "### Rebuilding font cache"
+      fc-cache -f "{{fonts_dir}}"
+    else
+      echo "### No font changes; skipping fc-cache."
+    fi
 
 # List installed user fonts
 fonts-list:
@@ -373,7 +503,7 @@ fonts-clean-cache:
 # Clone Elvish configuration
 @clone-elvish-config:
   @### Cloning Elvish config
-  git clone https://github.com/zzamboni/dot-elvish.git ~/.config/elvish
+  just _clone_repo ~/.config/elvish https://github.com/zzamboni/dot-elvish.git 
 
 # Commit Elvish configuration
 @commit-elvish-config:
@@ -383,10 +513,10 @@ fonts-clean-cache:
 # Clone Doom Emacs configuration
 @clone-emacs-config:
   @### Cloning Emacs config
-  git clone https://github.com/zzamboni/dot-doom.git ~/.doom.d
+  just _clone_repo ~/.doom.d https://github.com/zzamboni/dot-doom.git
 
 # Create useful symlinks
-@symlink-dropbox-dirs:
+@symlink-dirs:
     @### Setting up symlinks
     ln -sf ~/Dropbox/Personal ~
     ln -sf ~/Dropbox/Reference ~
@@ -397,8 +527,9 @@ fonts-clean-cache:
 # Run the baseline you likely want on MBP11,5
 [doc('Set minimum baseline for MBP11,5')]
 @baseline:
-    @### Kernel config
+    @### Kernel and hardware config
     just i915-append
+    just disable-idle-suspend
     @### Installing and configuring apps
     just vscode-disable-hwaccel
     just onepassword-install
@@ -410,8 +541,9 @@ fonts-clean-cache:
     just clone-elvish-config
     just clone-emacs-config
     just doom-emacs-install
+    just symlink-dirs
     just git-cred-install
     just git-cred-configure
     echo
-    @### Baseline applied. Next step: reboot to activate kernel args:
+    @### Baseline applied. Next step: reboot to activate changes (not needed if no changes reported above)
     @###    systemctl reboot
