@@ -1,0 +1,2 @@
+#!/bin/sh
+exec carapace --run "/var/home/diego/.config/carapace/specs/ujust.yaml" "$@"

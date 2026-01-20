@@ -1,0 +1,3 @@
+# yaml-language-server: $schema=https://carapace.sh/schemas/command.json
+name: ujust
+run: "[just, -f, '/usr/share/ublue-os/just/00-entry.just']"
