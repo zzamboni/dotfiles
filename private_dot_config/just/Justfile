@@ -111,7 +111,7 @@ i915-append:
     --append-if-missing=i915.enable_psr=0 \
     --append-if-missing=i915.enable_fbc=0 \
     --append-if-missing=i915.enable_dc=0 \
-    --append-if-missing=i915.fastboot=0
+    --append-if-missing=radeon.runpm=0
   ### Added i915 kernel args (if there were changes, they will take effect after reboot)."
 
 # Remove those i915 flags again (for testing).
@@ -121,7 +121,7 @@ i915-remove:
     --delete=i915.enable_psr \
     --delete=i915.enable_fbc \
     --delete=i915.enable_dc \
-    --delete=i915.fastboot
+    --delete=radeon.runpm
   @echo "Removed i915 kernel args (takes effect after reboot)."
 
 # Optional “max compatibility” additions (only if you hit new-kernel freezes/regressions).
@@ -174,6 +174,37 @@ disable-idle-suspend:
 # Status of idle suspend configuration
 @idle-suspend-status:
     systemd-analyze cat-config systemd/logind.conf | grep -nE 'IdleAction|99-disable-idle-suspend\.conf' || true
+
+# Hide grub boot menu
+grub-hide-menu-now:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    cfg="/boot/grub2/grub.cfg"
+    backup="/boot/grub2/grub.cfg.bak"
+
+    echo "### Hiding GRUB menu by patching $cfg (no grub2-mkconfig; composefs-safe)"
+
+    # Backup once
+    if [ ! -f "$backup" ]; then
+      echo "### Backing up to $backup"
+      sudo cp -a "$cfg" "$backup"
+    fi
+
+    # If already hidden/zero timeout, do nothing
+    if sudo grep -q '^set timeout_style=hidden' "$cfg" && sudo grep -q '^set timeout=0' "$cfg"; then
+      echo "### Already hidden (timeout_style=hidden, timeout=0); nothing to do."
+      exit 0
+    fi
+
+    # Patch: menu -> hidden, timeout -> 0 (only where GRUB sets them)
+    sudo sed -i \
+      -e 's/^set timeout_style=menu$/set timeout_style=hidden/' \
+      -e 's/^set timeout=[0-9][0-9]*$/set timeout=0/' \
+      "$cfg"
+
+    echo "### Patched. Verifying key lines:"
+    sudo grep -nE '^(set timeout_style=|set timeout=)' "$cfg" | head -n 30
 
 # --- Deployment hygiene ----------------------------------------------------
 
