@@ -60,6 +60,10 @@ maximize = true
 
 # theme = GruvboxDark
 
+# Make the selection match the colors in the terminal
+selection-foreground = cell-background
+selection-background = cell-foreground
+
 # Ctrl-tab and Ctrl-X o (like Emacs) to cycle among splits
 keybind = ctrl+tab=goto_split:next
 keybind = ctrl+x>o=goto_split:next

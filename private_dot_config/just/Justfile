@@ -553,6 +553,11 @@ fonts-clean-cache:
     ln -sf ~/Dropbox/Reference ~
     ln -sf ~/Dropbox/bin ~
 
+# Restart battery indicator when stuck
+@restart-upower:
+    @### Restarting upower
+    sudo systemctl restart upower
+
 # --- Baseline meta-task ----------------------------------------------------
 
 # Run the baseline you likely want on MBP11,5
