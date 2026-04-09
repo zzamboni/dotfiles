@@ -16,7 +16,7 @@ Currently only support 3x3 tabs grid.
   --pinned-row-count: 3;
   --pinned-gap: 8px;
   --pinned-icon-size: 20px;
-  --pinned-tab-height: 50px;
+  --pinned-tab-height: 40px;
   --animation-speed: 280ms;
 }
 
