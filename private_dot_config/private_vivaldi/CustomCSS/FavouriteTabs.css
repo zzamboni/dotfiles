@@ -18,6 +18,8 @@ Currently only support 3x3 tabs grid.
   --pinned-icon-size: 20px;
   --pinned-tab-height: 40px;
   --animation-speed: 280ms;
+  --pinned-tile-bg: var(--colorAccentBg, rgba(255, 255, 255, 0.2));
+  --pinned-tile-bg-active: var(--colorBg);
 }
 
 /* === Conditional: only apply when tabs-tabbar-container has class="left" or "right" === */
@@ -101,7 +103,7 @@ body:has(#tabs-tabbar-container.right) {
       padding: 0 !important;
       /* background-color: var(--colorBg, rgba(255, 255, 255, 0.2)) !important; */
       z-index: 150;
-      background-color: var(--colorBgAlpha) !important;
+      background-color: var(--pinned-tile-bg) !important;
       border: 1px solid var(--colorHighlightBgFaded) !important;
       z-index: 150;
     }
@@ -284,6 +286,7 @@ body:has(#tabs-tabbar-container.right) {
       > span:has(.is-pinned)
       .is-pinned.active
       .tab-wrapper {
+      background-color: var(--pinned-tile-bg-active) !important;
       outline: 2px solid var(--colorAccentBg, #4a90e2);
     }
 
