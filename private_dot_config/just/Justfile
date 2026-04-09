@@ -175,6 +175,33 @@ disable-idle-suspend:
 @idle-suspend-status:
     systemd-analyze cat-config systemd/logind.conf | grep -nE 'IdleAction|99-disable-idle-suspend\.conf' || true
 
+# Configure systemd-resolved to use NextDNS
+nextdns-configure:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    conf_file="/etc/systemd/resolved.conf"
+    desired_content=$'[Resolve]\nDNS=45.90.28.0#mbp115-bluefin-5efcc5.dns.nextdns.io\nDNS=2a07:a8c0::#mbp115-bluefin-5efcc5.dns.nextdns.io\nDNS=45.90.30.0#mbp115-bluefin-5efcc5.dns.nextdns.io\nDNS=2a07:a8c1::#mbp115-bluefin-5efcc5.dns.nextdns.io\nDNSOverTLS=yes\n'
+
+    echo "### Configuring systemd-resolved for NextDNS"
+
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    printf '%s' "$desired_content" >"$tmp"
+
+    if sudo test -f "$conf_file" && sudo cmp -s "$tmp" "$conf_file"; then
+      echo "### NextDNS already configured; nothing to do."
+      exit 0
+    fi
+
+    sudo install -m 0644 "$tmp" "$conf_file"
+
+    echo "### Restarting systemd-resolved"
+    sudo systemctl restart systemd-resolved
+
+    echo "### Verified config:"
+    sudo sed -n '1,20p' "$conf_file"
+
 # Hide grub boot menu
 grub-hide-menu-now:
     #!/usr/bin/env bash
@@ -302,10 +329,40 @@ ghostty-install:
     
     echo "### ==> Installing official Ghostty repo"
     . /etc/os-release && curl -fsSL "https://copr.fedorainfracloud.org/coprs/scottames/ghostty/repo/fedora-${VERSION_ID}/scottames-ghostty-fedora-${VERSION_ID}.repo" | sudo tee /etc/yum.repos.d/_copr:copr.fedorainfracloud.org:scottames:ghostty.repo > /dev/null
+
     echo "@### ==> Layering Ghostty package (activation requires reboot)"
     just _ensure_rpms ghostty
     echo
     echo "### Ghostty installed into next deployment."
+    echo "### Reboot to activate: systemctl reboot"
+
+# Update Ghostty to the latest version available from the configured repo
+ghostty-update:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    repo_file="/etc/yum.repos.d/_copr:copr.fedorainfracloud.org:scottames:ghostty.repo"
+
+    if [ ! -f "$repo_file" ]; then
+      echo "### Ghostty repo is not configured yet."
+      echo "### Run: just ghostty-install"
+      exit 1
+    fi
+
+    if ! just _package_installed ghostty; then
+      echo "### Ghostty is not currently layered."
+      echo "### Run: just ghostty-install"
+      exit 1
+    fi
+
+    echo "### ==> Refreshing rpm-ostree metadata"
+    sudo rpm-ostree refresh-md --force
+
+    echo "### ==> Updating deployment with latest Ghostty"
+    sudo rpm-ostree update --install ghostty
+
+    echo
+    echo "### Ghostty update staged into next deployment."
     echo "### Reboot to activate: systemctl reboot"
 
 # Install GUI Emacs and helpers (idempotent)
