@@ -63,10 +63,9 @@
 	user = zzamboni
 [init]
 	defaultBranch = main
+[credential "https://dev.azure.com"]
+	useHttpPath = true
 [credential]
 	helper = 
 	helper = /usr/local/bin/git-credential-manager
 	credentialStore = secretservice
-	useHttpPath = true
-[credential "https://dev.azure.com"]
-	useHttpPath = true

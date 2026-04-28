@@ -250,6 +250,26 @@ vivaldi version: v7.9+
     overflow:visible;
 }
 
+/* Restore native clipping/scroll behavior for vertical tab bars.
+   Without this, the tab column can grow past the window and push the header off-screen
+   instead of letting the tab strip scroll. */
+#browser:is(.tabs-left, .tabs-right) #main,
+#browser:is(.tabs-left, .tabs-right) #main > .inner{
+    overflow:hidden;
+    min-height:0;
+}
+
+#browser:is(.tabs-left, .tabs-right) .tabbar-wrapper{
+    min-height:0;
+}
+
+#browser:is(.tabs-left, .tabs-right) #tabs-container .tab-strip,
+#browser:is(.tabs-left, .tabs-right) #tabs-subcontainer .tab-strip{
+    overflow-y:auto;
+    overflow-x:hidden;
+    min-height:0;
+}
+
 #browser:not(.tabs-top):not(.tabs-bottom):not(.fullscreen) #webpage-stack{
     border-radius:var(--radiusCap);
 }

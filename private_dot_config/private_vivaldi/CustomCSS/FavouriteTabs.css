@@ -10,7 +10,7 @@ Currently only support 3x3 tabs grid.
 /* === Uncomment :root to use and config this mod independently === */
 :root {
   --fluid-tabs-grid: on;
-  --fluid-pin-at-top: off;
+  --fluid-pin-at-top: on;
 
   --pinned-column-count: 3;
   --pinned-row-count: 3;
@@ -603,7 +603,7 @@ body:has(#tabs-tabbar-container.right) {
       #tabs-container .tab-strip > span:has(.is-pinned):nth-child(n + 10),
       #tabs-container .tab-strip > span:not(:has(.is-pinned)) {
         grid-row: auto !important;
-        /* margin-top: calc((var(--pinned-tab-height) + var(--pinned-gap)) * 3 + 1px) !important; */
+        margin-top: calc((var(--pinned-tab-height) + var(--pinned-gap)) * 3) !important;
       }
     }
   }

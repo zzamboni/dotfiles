@@ -1,0 +1,12 @@
+{
+    "leanpub_api_key": {{ onepasswordRead "op://Private/leanpub/api key" }}
+    "books": [
+        "learning-hammerspoon",
+        "learning-cfengine",
+        "emacs-org-leanpub",
+        "lit-config",
+        "zztestbook2"
+    ],
+    "poll_interval": 30,
+    "notification_timeout_ms": 5000
+}
