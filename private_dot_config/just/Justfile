@@ -241,6 +241,12 @@ pin-current:
   @sudo ostree admin pin 0
   @echo "Pinned current deployment (index 0)."
 
+# Unpin the given deployment
+unpin depnumber:
+    @just _need ostree
+    @sudo ostree admin pin -u "{{depnumber}}"
+    @echo "Unpinned deployment with index {{depnumber}}"
+    
 # Show deployments with indices (useful before pin/undeploy decisions).
 deployments:
   @just _need ostree
