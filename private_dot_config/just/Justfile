@@ -96,13 +96,27 @@ _clone_repo dest url:
   @### Full kernel cmdline ###
   cat /proc/cmdline
   echo
-  @### Kernel cmdline (i915) ###
-  cat /proc/cmdline | tr ' ' '\n' | grep -E '^i915\.' || true
+  @### Kernel args ###
+  cat /proc/cmdline | tr ' ' '\n' || true
   echo
   @### rpm-ostree status ###
   rpm-ostree status
 
 # --- Hardware-specific config -----------------------------------------
+
+# Apply MacBookPro11,5 GPU kernel arguments
+setup-macbook-gpu-kargs:
+    @# Required for kernels 6.17+ where amdgpu claims SI GPUs by default
+    @# but fails to initialize the Radeon R9 M370X, causing power-off on boot.
+    @just _is_bluefin
+    # Applying MacBookPro11,5 GPU kernel arguments...
+    # This blacklists amdgpu and enables radeon SI support.
+    @sudo rpm-ostree kargs \
+        --append-if-missing=rd.driver.blacklist=amdgpu \
+        --append-if-missing=modprobe.blacklist=amdgpu \
+        --append-if-missing=amdgpu.si_support=0 \
+        --append-if-missing=amdgpu.cik_support=0 \
+        --append-if-missing=radeon.si_support=1
 
 # Append the i915 safety flags you’ve been using.
 i915-append:
